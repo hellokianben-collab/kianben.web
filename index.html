@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="theme-color" content="#0A1B2A"/>
+  <meta name="theme-color" content="#05080F"/>
 
   <!-- ══ Primary SEO ═══════════════════════════════════════════════ -->
   <title>KiAnben — Import Without an Import License | 1% Shared Imports, Bangladesh</title>
@@ -60,12 +60,14 @@
   <!-- ══ Fonts ═════════════════════════════════════════════════════ -->
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Zilla+Slab:wght@700&text=KiAnben&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@700&text=KiAnben&display=swap" rel="stylesheet"/>
 
   <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
+<canvas id="fx" aria-hidden="true"></canvas>
+<div class="aurora" aria-hidden="true"><i class="a1"></i><i class="a2"></i><i class="a3"></i></div>
 
 <a class="skip-link" href="#main">Skip to main content</a>
 
@@ -146,9 +148,9 @@
         <a class="btn btn-line" href="#how-it-works">See how it works</a>
       </div>
       <ul class="hero-facts">
-        <li><b>1%</b> flat commission on shared imports</li>
-        <li><b>15+</b> origin countries</li>
-        <li><b>24h</b> quote turnaround</li>
+        <li><b class="count" data-target="1" data-suffix="%">0%</b> flat commission on shared imports</li>
+        <li><b class="count" data-target="15" data-suffix="+">0+</b> origin countries</li>
+        <li><b class="count" data-target="24" data-suffix="h">0h</b> quote turnaround</li>
       </ul>
     </div>
 
@@ -167,7 +169,7 @@
         </svg>
       </div>
 
-      <figure class="waybill" aria-label="Example shared-import waybill">
+      <figure data-tilt class="waybill" aria-label="Example shared-import waybill">
         <div class="wb-head">
           <span class="doc">Shared import · Waybill</span>
           <span class="no">KB-2026-031</span>
@@ -259,7 +261,7 @@
         </ul>
       </div>
 
-      <div class="ledger" role="region" aria-label="Cost comparison: middleman versus KiAnben">
+      <div data-tilt class="ledger" role="region" aria-label="Cost comparison: middleman versus KiAnben">
         <div class="ledger-head">
           <h3>Cost of importing</h3>
           <span class="tag">Per shipment</span>
@@ -314,7 +316,7 @@
     </div>
 
     <div class="svc-grid">
-      <article class="svc lead">
+      <article data-tilt class="svc lead">
         <div class="svc-top">
           <span class="svc-code">SVC-01</span>
           <span class="svc-ic"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg></span>
@@ -332,7 +334,7 @@
         </button>
       </article>
 
-      <article class="svc">
+      <article data-tilt class="svc">
         <div class="svc-top">
           <span class="svc-code">SVC-02</span>
           <span class="svc-ic"><svg class="ic" aria-hidden="true"><use href="#i-ship"/></svg></span>
@@ -348,7 +350,7 @@
         <a class="btn btn-line" href="#join">Apply to join</a>
       </article>
 
-      <article class="svc">
+      <article data-tilt class="svc">
         <div class="svc-top">
           <span class="svc-code">SVC-03</span>
           <span class="svc-ic"><svg class="ic" aria-hidden="true"><use href="#i-compass"/></svg></span>
@@ -427,7 +429,7 @@
     </div>
 
     <div class="plans" id="pricingGrid">
-      <article class="plan">
+      <article data-tilt class="plan">
         <p class="plan-code">Plan-01 · Annual</p>
         <h3>Starter</h3>
         <div class="plan-price"><span class="amt">Free</span></div>
@@ -443,7 +445,7 @@
         <a class="btn btn-line" href="#join">Join free</a>
       </article>
 
-      <article class="plan popular">
+      <article data-tilt class="plan popular">
         <p class="plan-code">Plan-02 · Annual</p>
         <h3>Community</h3>
         <div class="plan-price"><span class="amt">৳2,500</span><span class="per">/ year</span></div>
@@ -459,7 +461,7 @@
         <a class="btn btn-ink" href="#join">Get started</a>
       </article>
 
-      <article class="plan">
+      <article data-tilt class="plan">
         <p class="plan-code">Plan-03 · Annual</p>
         <h3>Business</h3>
         <div class="plan-price"><span class="amt">৳8,000</span><span class="per">/ year</span></div>
@@ -547,14 +549,14 @@
       </div>
 
       <aside>
-        <div class="side-card">
+        <div data-tilt class="side-card">
           <h3><svg class="ic" aria-hidden="true"><use href="#i-megaphone"/></svg> Post an announcement</h3>
           <p>KiAnben member? Submit a notice for the community board.</p>
           <button class="btn btn-ink btn-sm" id="openAnnouncementModal" type="button">
             Submit a request <svg class="ic ic-sm" aria-hidden="true"><use href="#i-arrow-right"/></svg>
           </button>
         </div>
-        <div class="side-card">
+        <div data-tilt class="side-card">
           <h3><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg> How posting works</h3>
           <ul class="side-list">
             <li><b>01</b> Members submit a request</li>
@@ -596,7 +598,7 @@
         </div>
       </div>
 
-      <div class="panel">
+      <div data-tilt class="panel">
         <h3>Apply for membership</h3>
         <div id="joinSuccess" class="success-box hidden" role="alert">
           <svg class="ic ic-lg" aria-hidden="true"><use href="#i-check-circle"/></svg>

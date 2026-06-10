@@ -8,6 +8,8 @@
 
 const API = '/api';
 
+const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 document.addEventListener('DOMContentLoaded', () => {
   initNavbar();
   initLanes();
@@ -16,6 +18,11 @@ document.addEventListener('DOMContentLoaded', () => {
   initForms();
   loadAnnouncements();
   restoreSession();   // ← runs silently every page load
+  initParticles();
+  initTilt();
+  initParallax();
+  initRipples();
+  initCounters();
 });
 
 /* ══════════════════ 7-DAY PERSISTENT SESSION ══════════════════ */
@@ -479,4 +486,138 @@ function togglePassword(id, btn) {
   const use = btn?.querySelector('use');
   if (use) use.setAttribute('href', inp.type === 'password' ? '#i-eye' : '#i-eye-off');
   btn?.setAttribute('aria-label', inp.type === 'password' ? 'Show password' : 'Hide password');
+}
+
+/* ════════════════ FX ENGINE — particles · tilt · parallax · ripple · counters ════ */
+
+/* ── ambient particle field (canvas, rAF, DPR-aware, paused when hidden) ── */
+function initParticles() {
+  const cv = document.getElementById('fx');
+  if (!cv || REDUCED) return;
+  const ctx = cv.getContext('2d', { alpha: true });
+  let W, H, pts = [], raf;
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const N = window.innerWidth < 700 ? 38 : 70;
+
+  function size() {
+    W = cv.width  = innerWidth  * DPR;
+    H = cv.height = innerHeight * DPR;
+    cv.style.width = innerWidth + 'px'; cv.style.height = innerHeight + 'px';
+  }
+  function seed() {
+    pts = Array.from({ length: N }, () => ({
+      x: Math.random() * W, y: Math.random() * H,
+      r: (Math.random() * 1.6 + .5) * DPR,
+      vx: (Math.random() - .5) * .12 * DPR,
+      vy: (Math.random() - .5) * .12 * DPR,
+      a: Math.random() * .5 + .12
+    }));
+  }
+  function tick() {
+    ctx.clearRect(0, 0, W, H);
+    for (const p of pts) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, 7);
+      ctx.fillStyle = `rgba(111,217,255,${p.a})`;
+      ctx.fill();
+    }
+    // faint connective lines between near particles
+    ctx.strokeStyle = 'rgba(41,171,226,.05)'; ctx.lineWidth = DPR * .6;
+    for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+      const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y, d = dx * dx + dy * dy;
+      if (d < 12000 * DPR * DPR) { ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[j].x, pts[j].y); ctx.stroke(); }
+    }
+    raf = requestAnimationFrame(tick);
+  }
+  size(); seed(); tick();
+  addEventListener('resize', () => { size(); seed(); }, { passive: true });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) cancelAnimationFrame(raf); else tick();
+  });
+}
+
+/* ── 3D tilt + glare on [data-tilt] cards ── */
+function initTilt() {
+  if (REDUCED || matchMedia('(hover: none)').matches) return;
+  const MAX = 7; // deg
+  document.querySelectorAll('[data-tilt]').forEach(el => {
+    let raf = 0;
+    el.addEventListener('pointermove', e => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        const r = el.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width;
+        const py = (e.clientY - r.top)  / r.height;
+        el.style.setProperty('--ry', ((px - .5) *  MAX * 2).toFixed(2) + 'deg');
+        el.style.setProperty('--rx', ((py - .5) * -MAX * 2).toFixed(2) + 'deg');
+        el.style.setProperty('--mx', (px * 100).toFixed(1) + '%');
+        el.style.setProperty('--my', (py * 100).toFixed(1) + '%');
+        raf = 0;
+      });
+    });
+    el.addEventListener('pointerleave', () => {
+      el.style.setProperty('--rx', '0deg');
+      el.style.setProperty('--ry', '0deg');
+    });
+  });
+}
+
+/* ── parallax — aurora blobs + hero seal drift with scroll ── */
+function initParallax() {
+  if (REDUCED) return;
+  const layers = [
+    { el: document.querySelector('.aurora .a1'), f: .06 },
+    { el: document.querySelector('.aurora .a2'), f: -.04 },
+    { el: document.querySelector('.aurora .a3'), f: .03 },
+    { el: document.querySelector('.hero .seal'), f: .09 }
+  ].filter(l => l.el);
+  let raf = 0;
+  addEventListener('scroll', () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      const y = scrollY;
+      layers.forEach(l => { l.el.style.translate = `0 ${(y * l.f).toFixed(1)}px`; });
+      raf = 0;
+    });
+  }, { passive: true });
+}
+
+/* ── button ripple ── */
+function initRipples() {
+  if (REDUCED) return;
+  document.addEventListener('pointerdown', e => {
+    const btn = e.target.closest('.btn');
+    if (!btn) return;
+    const r = btn.getBoundingClientRect();
+    const d = Math.max(r.width, r.height);
+    const sp = document.createElement('span');
+    sp.className = 'ripple';
+    sp.style.width = sp.style.height = d + 'px';
+    sp.style.left = (e.clientX - r.left - d / 2) + 'px';
+    sp.style.top  = (e.clientY - r.top  - d / 2) + 'px';
+    btn.appendChild(sp);
+    setTimeout(() => sp.remove(), 700);
+  });
+}
+
+/* ── animated hero counters (same facts: 1% / 15+ / 24h) ── */
+function initCounters() {
+  const els = document.querySelectorAll('.count');
+  if (!els.length) return;
+  if (REDUCED) { els.forEach(el => { el.textContent = el.dataset.target + (el.dataset.suffix || ''); }); return; }
+  const obs = new IntersectionObserver(entries => entries.forEach(en => {
+    if (!en.isIntersecting) return;
+    const el = en.target, target = parseInt(el.dataset.target, 10) || 0, suf = el.dataset.suffix || '';
+    const t0 = performance.now(), dur = 1400;
+    (function step(t) {
+      const k = Math.min((t - t0) / dur, 1);
+      el.textContent = Math.round(target * (1 - Math.pow(1 - k, 3))) + suf; // ease-out cubic
+      if (k < 1) requestAnimationFrame(step);
+    })(t0);
+    obs.unobserve(el);
+  }), { threshold: .6 });
+  els.forEach(el => obs.observe(el));
 }
