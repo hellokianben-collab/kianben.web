@@ -1,10 +1,8 @@
 /* ============================================================
-   KiAnben — Main Frontend JS  v3
-   Features:
-   · 7-day persistent login — no re-login needed for 7 days
-   · Silent server-side token verification on page load
-   · Member profile editing with social media links
-   · Announcement feed, join form, announcement request
+   KiAnben — Main Frontend JS  v4 ("Manifest" redesign)
+   · Same API contract as v3 — endpoints, payloads, session keys
+   · 7-day persistent login with silent server verification
+   · No Font Awesome — inline SVG sprite (<use href="#i-…">)
    ============================================================ */
 'use strict';
 
@@ -12,7 +10,7 @@ const API = '/api';
 
 document.addEventListener('DOMContentLoaded', () => {
   initNavbar();
-  initHero();
+  initLanes();
   initAnimations();
   initModals();
   initForms();
@@ -20,36 +18,23 @@ document.addEventListener('DOMContentLoaded', () => {
   restoreSession();   // ← runs silently every page load
 });
 
-/* ════════════════════════════════════════════════════════
-   7-DAY PERSISTENT SESSION
-   ════════════════════════════════════════════════════════ */
+/* ══════════════════ 7-DAY PERSISTENT SESSION ══════════════════ */
 
-/**
- * Called on every page load.
- * 1. Instantly restores nav from localStorage (no flicker).
- * 2. Verifies token with server in background.
- * 3. If server says invalid → clears session silently.
- * Token is valid for 7 days — user never needs to re-login.
- */
 async function restoreSession() {
   const token  = localStorage.getItem('kb_token');
   const raw    = localStorage.getItem('kb_user');
   const expiry = parseInt(localStorage.getItem('kb_expiry') || '0', 10);
 
-  // Nothing stored
   if (!token || !raw) { setNavState(null); return; }
-
-  // Client-side expiry (7 days)
   if (Date.now() > expiry) { clearSession(); setNavState(null); return; }
 
-  // Instantly restore from cache
   try {
     const user = JSON.parse(raw);
     setNavState(user);
     fillProfileForm(user);
   } catch { clearSession(); setNavState(null); return; }
 
-  // Background server verify — updates cached profile with latest data
+  // Background server verify — refreshes cached profile
   try {
     const res  = await fetch(`${API}/auth/verify`, { headers: { Authorization: `Bearer ${token}` } });
     const data = await res.json();
@@ -75,41 +60,36 @@ function clearSession() {
 
 function getToken() { return localStorage.getItem('kb_token'); }
 
-/* ════════════════════════════════════════════════════════
-   NAV STATE
-   ════════════════════════════════════════════════════════ */
+/* ══════════════════ NAV STATE ══════════════════ */
+
 function setNavState(user) {
   const old = document.getElementById('openSignin');
   if (!old) return;
-  const btn = old.cloneNode(false); // clone wipes old event listeners
+  const btn = old.cloneNode(false); // clone wipes old listeners
 
   if (user) {
     const first = (user.fullName || 'Member').split(' ')[0];
-    btn.innerHTML       = `<i class="fas fa-user-circle"></i> ${esc(first)}`;
-    btn.style.color       = 'var(--blue)';
-    btn.style.borderColor = 'rgba(41,171,226,.4)';
+    btn.classList.add('is-auth');
+    btn.innerHTML = `<svg class="ic ic-sm" aria-hidden="true"><use href="#i-user-circle"/></svg> ${esc(first)}`;
     btn.addEventListener('click', () => {
-      // Set dashboard name + email
       const n = document.getElementById('dashName');
       const e = document.getElementById('dashEmail');
-      if (n) n.textContent = `Welcome, ${esc(user.fullName || '')}!`;
+      if (n) n.textContent = `Welcome, ${user.fullName || ''}!`;
       if (e) e.textContent = user.email || '';
-      // Set avatar initial letter
       const av = document.getElementById('dashAvatar');
-      if (av) av.innerHTML = `<span style="font-family:'Oswald',sans-serif;font-size:1.4rem;font-weight:700;color:var(--blue)">${(user.fullName||'M')[0].toUpperCase()}</span>`;
+      if (av) av.textContent = (user.fullName || 'M')[0].toUpperCase();
       openModal('dashboardModal');
     });
   } else {
-    btn.innerHTML = '<i class="fas fa-user"></i> Sign In';
-    btn.style.color = btn.style.borderColor = '';
+    btn.classList.remove('is-auth');
+    btn.innerHTML = `<svg class="ic ic-sm" aria-hidden="true"><use href="#i-user"/></svg> Sign in`;
     btn.addEventListener('click', () => openModal('signinModal'));
   }
   old.replaceWith(btn);
 }
 
-/* ════════════════════════════════════════════════════════
-   NAVBAR
-   ════════════════════════════════════════════════════════ */
+/* ══════════════════ NAVBAR ══════════════════ */
+
 function initNavbar() {
   const navbar    = document.getElementById('navbar');
   const hamburger = document.getElementById('hamburger');
@@ -122,16 +102,15 @@ function initNavbar() {
 
   hamburger.addEventListener('click', () => {
     const open = navLinks.classList.toggle('open');
-    const s    = hamburger.querySelectorAll('span');
-    s[0].style.transform = open ? 'rotate(45deg) translate(5px,5px)'   : '';
-    s[1].style.opacity   = open ? '0' : '1';
-    s[2].style.transform = open ? 'rotate(-45deg) translate(5px,-5px)' : '';
+    hamburger.classList.toggle('open', open);
+    hamburger.setAttribute('aria-expanded', String(open));
   });
 
   document.querySelectorAll('.nav-link').forEach(l =>
     l.addEventListener('click', () => {
       navLinks.classList.remove('open');
-      hamburger.querySelectorAll('span').forEach(s => { s.style.transform = ''; s.style.opacity = ''; });
+      hamburger.classList.remove('open');
+      hamburger.setAttribute('aria-expanded', 'false');
     })
   );
 }
@@ -144,118 +123,100 @@ function updateActiveLink() {
   });
 }
 
-/* ════════════════════════════════════════════════════════
-   HERO — Floating particles + animated counters
-   ════════════════════════════════════════════════════════ */
-function initHero() {
-  const c = document.getElementById('floatingDots');
-  if (!c) return;
+/* ══════════════════ LANES TICKER — duplicate track for seamless loop ══ */
 
-  const s = document.createElement('style');
-  s.textContent = `@keyframes fd{0%,100%{transform:translateY(0) translateX(0);opacity:.2}45%{transform:translateY(-26px) translateX(12px);opacity:.65}75%{transform:translateY(10px) translateX(-8px);opacity:.3}}`;
-  document.head.appendChild(s);
-
-  for (let i = 0; i < 30; i++) {
-    const d = document.createElement('div');
-    const z = (Math.random() * 3 + 1).toFixed(1);
-    Object.assign(d.style, {
-      position:'absolute', borderRadius:'50%', pointerEvents:'none',
-      width:`${z}px`, height:`${z}px`,
-      background:`rgba(41,171,226,${(Math.random()*.45+.08).toFixed(2)})`,
-      left:`${(Math.random()*100).toFixed(1)}%`, top:`${(Math.random()*100).toFixed(1)}%`,
-      animation:`fd ${(Math.random()*9+6).toFixed(1)}s ease-in-out infinite`,
-      animationDelay:`${(Math.random()*6).toFixed(1)}s`
-    });
-    c.appendChild(d);
-  }
-
-  const obs = new IntersectionObserver(
-    entries => entries.forEach(e => { if (e.isIntersecting) { animateCount(e.target); obs.unobserve(e.target); } }),
-    { threshold: .5 }
-  );
-  document.querySelectorAll('.stat-num').forEach(el => obs.observe(el));
+function initLanes() {
+  const track = document.getElementById('lanesTrack');
+  if (!track) return;
+  track.innerHTML += track.innerHTML; // two copies → -50% translate loops cleanly
 }
 
-function animateCount(el) {
-  const target = parseInt(el.dataset.target, 10) || 0;
-  const step   = target / (1800 / 16);
-  let   cur    = 0;
-  const t = setInterval(() => {
-    cur = Math.min(cur + step, target);
-    el.textContent = Math.floor(cur).toLocaleString();
-    if (cur >= target) clearInterval(t);
-  }, 16);
-}
+/* ══════════════════ SCROLL ANIMATIONS ══════════════════ */
 
-/* ════════════════════════════════════════════════════════
-   SCROLL ANIMATIONS
-   ════════════════════════════════════════════════════════ */
 function initAnimations() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll('.reveal').forEach(el => el.classList.add('visible'));
+    return;
+  }
   const obs = new IntersectionObserver((entries) => {
     entries.forEach((e, i) => {
       if (e.isIntersecting) { setTimeout(() => e.target.classList.add('visible'), i * 80); obs.unobserve(e.target); }
     });
   }, { threshold: .1 });
 
-  document.querySelectorAll('.service-card,.price-card,.why-card,.step,.pillar,.ann-item').forEach(el => {
+  document.querySelectorAll('.svc,.plan,.why,.step,.ann-item,.about-points li').forEach(el => {
     el.classList.add('reveal'); obs.observe(el);
   });
 }
 
-/* ════════════════════════════════════════════════════════
-   MODALS
-   ════════════════════════════════════════════════════════ */
+/* ══════════════════ MODALS ══════════════════ */
+
 function initModals() {
-  // Close buttons
   document.getElementById('closeSignin')?.addEventListener('click',            () => closeModal('signinModal'));
   document.getElementById('closeAnnouncementModal')?.addEventListener('click', () => closeModal('announcementModal'));
   document.getElementById('closeDashboard')?.addEventListener('click',         () => closeModal('dashboardModal'));
 
-  // Open Quote modal
-  document.getElementById('openQuoteModal')?.addEventListener('click', () => openModal('quoteModal'));
+  // close buttons with data-close (profile / quote)
+  document.querySelectorAll('.js-close').forEach(b =>
+    b.addEventListener('click', () => closeModal(b.dataset.close))
+  );
 
-  // Sign out
+  // every quote-open trigger
+  document.querySelectorAll('.js-open-quote, #openQuoteModal').forEach(b =>
+    b.addEventListener('click', () => openModal('quoteModal'))
+  );
+
+  document.getElementById('openAnnouncementModal')?.addEventListener('click', () => openModal('announcementModal'));
+
   document.getElementById('logoutBtn')?.addEventListener('click', () => {
     clearSession(); closeModal('dashboardModal'); setNavState(null);
     showToast('You have been signed out.', 'success');
   });
 
-  // Go to join section from sign-in modal
   document.getElementById('goToJoin')?.addEventListener('click', e => {
     e.preventDefault(); closeModal('signinModal');
-    document.getElementById('join')?.scrollIntoView({ behavior:'smooth' });
+    document.getElementById('join')?.scrollIntoView({ behavior: 'smooth' });
   });
 
-  // Dashboard → announcements section
   document.getElementById('dashViewAnnounce')?.addEventListener('click', () => {
     closeModal('dashboardModal');
-    document.getElementById('announcements')?.scrollIntoView({ behavior:'smooth' });
+    document.getElementById('announcements')?.scrollIntoView({ behavior: 'smooth' });
   });
 
-  // Dashboard → profile modal
   document.getElementById('openProfileEdit')?.addEventListener('click', () => {
     closeModal('dashboardModal'); openModal('profileModal');
   });
 
-  // Click outside overlay to close
+  // password show/hide (event delegation, SVG icon swap)
+  document.querySelectorAll('.pw-toggle').forEach(b =>
+    b.addEventListener('click', () => togglePassword(b.dataset.target, b))
+  );
+
   document.querySelectorAll('.modal-overlay').forEach(o =>
     o.addEventListener('click', e => { if (e.target === o) closeModal(o.id); })
   );
 
-  // Escape key closes
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape')
       document.querySelectorAll('.modal-overlay.active').forEach(m => closeModal(m.id));
   });
 }
 
-function openModal(id)  { const el = document.getElementById(id); if (el) { el.classList.add('active');    document.body.style.overflow = 'hidden'; } }
-function closeModal(id) { const el = document.getElementById(id); if (el) { el.classList.remove('active'); document.body.style.overflow = ''; } }
-window.closeModal = closeModal; // expose for inline onclick
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('active');
+  document.body.style.overflow = 'hidden';
+  el.querySelector('input, select, textarea, button:not(.modal-x)')?.focus({ preventScroll: true });
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) { el.classList.remove('active'); document.body.style.overflow = ''; }
+}
+window.closeModal = closeModal;
 
-/* ════════════════════════════════════════════════════════
-   FORMS
-   ════════════════════════════════════════════════════════ */
+/* ══════════════════ FORMS ══════════════════ */
+
 function initForms() {
   initSignInForm();
   initJoinForm();
@@ -263,6 +224,8 @@ function initForms() {
   initProfileForm();
   initQuoteForm();
 }
+
+const SPIN = '<span class="spin" aria-hidden="true"></span> ';
 
 /* ── Sign In ── */
 function initSignInForm() {
@@ -274,42 +237,44 @@ function initSignInForm() {
     const errEl = document.getElementById('signinError');
     errEl.classList.add('hidden');
     const btn = form.querySelector('button[type="submit"]');
-    setBtn(btn, true, '<i class="fas fa-circle-notch fa-spin"></i> Signing in…');
+    const idle = btn.innerHTML;
+    setBtn(btn, true, SPIN + 'Signing in…');
 
     try {
       const res  = await fetch(`${API}/auth/login`, post(Object.fromEntries(new FormData(e.target))));
       const data = await res.json();
 
       if (res.ok) {
-        // Save session for 7 days
         saveSession(data.token, data.user);
         closeModal('signinModal');
         form.reset();
+        setBtn(btn, false, idle);
         setNavState(data.user);
         fillProfileForm(data.user);
-        showToast(`Welcome back, ${data.user.fullName.split(' ')[0]}! 👋`, 'success');
+        showToast(`Welcome back, ${data.user.fullName.split(' ')[0]}!`, 'success');
       } else {
         errEl.textContent = data.message || 'Invalid email or password.';
         errEl.classList.remove('hidden');
-        setBtn(btn, false, 'Sign In <i class="fas fa-sign-in-alt"></i>');
+        setBtn(btn, false, idle);
       }
     } catch {
       errEl.textContent = 'Network error. Check your connection.';
       errEl.classList.remove('hidden');
-      setBtn(btn, false, 'Sign In <i class="fas fa-sign-in-alt"></i>');
+      setBtn(btn, false, idle);
     }
   });
 }
 
-/* ── Join / Apply Form ── */
+/* ── Join / Apply ── */
 function initJoinForm() {
   const form = document.getElementById('joinForm');
   if (!form) return;
 
   form.addEventListener('submit', async e => {
     e.preventDefault();
-    const btn = document.getElementById('joinSubmitBtn');
-    setBtn(btn, true, '<i class="fas fa-circle-notch fa-spin"></i> Submitting…');
+    const btn  = document.getElementById('joinSubmitBtn');
+    const idle = btn.innerHTML;
+    setBtn(btn, true, SPIN + 'Submitting…');
 
     try {
       const res  = await fetch(`${API}/members/apply`, post(Object.fromEntries(new FormData(e.target))));
@@ -321,11 +286,11 @@ function initJoinForm() {
         showToast("Application submitted! We'll review within 24 hours.", 'success');
       } else {
         showToast(data.message || 'Something went wrong. Please try again.', 'error');
-        setBtn(btn, false, '<span>Submit Application</span> <i class="fas fa-paper-plane"></i>');
+        setBtn(btn, false, idle);
       }
     } catch {
       showToast('Network error. Please try again.', 'error');
-      setBtn(btn, false, '<span>Submit Application</span> <i class="fas fa-paper-plane"></i>');
+      setBtn(btn, false, idle);
     }
   });
 }
@@ -339,8 +304,9 @@ function initAnnouncementForm() {
     e.preventDefault();
     const errEl = document.getElementById('aReqError');
     errEl.classList.add('hidden');
-    const btn = form.querySelector('button[type="submit"]');
-    setBtn(btn, true, '<i class="fas fa-circle-notch fa-spin"></i> Submitting…');
+    const btn  = form.querySelector('button[type="submit"]');
+    const idle = btn.innerHTML;
+    setBtn(btn, true, SPIN + 'Submitting…');
 
     try {
       const res  = await fetch(`${API}/announcements/request`, post(Object.fromEntries(new FormData(e.target))));
@@ -353,17 +319,17 @@ function initAnnouncementForm() {
       } else {
         errEl.textContent = data.message || 'Please try again.';
         errEl.classList.remove('hidden');
-        setBtn(btn, false, 'Submit for Review <i class="fas fa-paper-plane"></i>');
+        setBtn(btn, false, idle);
       }
     } catch {
       errEl.textContent = 'Network error.';
       errEl.classList.remove('hidden');
-      setBtn(btn, false, 'Submit for Review <i class="fas fa-paper-plane"></i>');
+      setBtn(btn, false, idle);
     }
   });
 }
 
-/* ── Profile Edit (social links + bio) ── */
+/* ── Profile Edit ── */
 function initProfileForm() {
   const form = document.getElementById('profileForm');
   if (!form) return;
@@ -375,8 +341,9 @@ function initProfileForm() {
     const token = getToken();
     if (!token) { closeModal('profileModal'); openModal('signinModal'); return; }
 
-    const btn = form.querySelector('button[type="submit"]');
-    setBtn(btn, true, '<i class="fas fa-circle-notch fa-spin"></i> Saving…');
+    const btn  = form.querySelector('button[type="submit"]');
+    const idle = btn.innerHTML;
+    setBtn(btn, true, SPIN + 'Saving…');
 
     try {
       const payload = Object.fromEntries(new FormData(e.target));
@@ -388,7 +355,6 @@ function initProfileForm() {
       const data = await res.json();
 
       if (res.ok) {
-        // Update cached session with fresh profile
         saveSession(token, data.user, parseInt(localStorage.getItem('kb_expiry') || '0', 10));
         const saved = document.getElementById('profileSaved');
         if (saved) { saved.classList.remove('hidden'); setTimeout(() => saved.classList.add('hidden'), 3000); }
@@ -402,7 +368,7 @@ function initProfileForm() {
       errEl.classList.remove('hidden');
     }
 
-    setBtn(btn, false, 'Save Profile &nbsp;<i class="fas fa-save"></i>');
+    setBtn(btn, false, idle);
   });
 }
 
@@ -417,9 +383,8 @@ function fillProfileForm(user) {
   });
 }
 
-/* ════════════════════════════════════════════════════════
-   ANNOUNCEMENTS FEED
-   ════════════════════════════════════════════════════════ */
+/* ══════════════════ ANNOUNCEMENTS FEED ══════════════════ */
+
 async function loadAnnouncements() {
   const feed = document.getElementById('announcementFeed');
   if (!feed) return;
@@ -436,24 +401,30 @@ async function loadAnnouncements() {
       }, { threshold: .1 });
       feed.querySelectorAll('.ann-item.reveal').forEach(el => obs.observe(el));
     } else {
-      feed.innerHTML = `<div class="no-ann"><i class="fas fa-bullhorn"></i><p>No announcements yet. Be the first to submit one!</p></div>`;
+      feed.innerHTML = `<div class="no-ann">
+        <svg class="ic ic-lg" aria-hidden="true"><use href="#i-megaphone"/></svg>
+        <p>No announcements on file yet. Be the first to submit one.</p>
+      </div>`;
     }
   } catch {
-    feed.innerHTML = `<div class="no-ann"><i class="fas fa-exclamation-circle"></i><p>Could not load announcements. Please refresh.</p></div>`;
+    feed.innerHTML = `<div class="no-ann">
+      <svg class="ic ic-lg" aria-hidden="true"><use href="#i-alert"/></svg>
+      <p>Could not load the board. Please refresh.</p>
+    </div>`;
   }
 }
 
 function annCard(a) {
-  const d = new Date(a.created_at).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
-  return `<div class="ann-item reveal">
-    <div class="ann-item-head"><span class="ann-badge-label">KiAnben Community</span><span class="ann-date">${d}</span></div>
-    <div class="ann-title">${esc(a.title)}</div>
-    <div class="ann-text">${esc(a.content)}</div>
-    <div class="ann-author"><i class="fas fa-user-circle"></i> ${esc(a.author)}</div>
-  </div>`;
+  const d = new Date(a.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  return `<article class="ann-item reveal">
+    <div class="ann-meta"><span class="ann-badge">KIANBEN COMMUNITY</span><span class="ann-date">${d}</span></div>
+    <h3 class="ann-title">${esc(a.title)}</h3>
+    <p class="ann-text">${esc(a.content)}</p>
+    <p class="ann-author"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-user-circle"/></svg> ${esc(a.author)}</p>
+  </article>`;
 }
 
-/* ── Get a Quote Form ── */
+/* ── Get a Quote ── */
 function initQuoteForm() {
   const form = document.getElementById('quoteForm');
   if (!form) return;
@@ -462,8 +433,9 @@ function initQuoteForm() {
     e.preventDefault();
     const errEl = document.getElementById('quoteError');
     errEl.classList.add('hidden');
-    const btn = document.getElementById('quoteSubmitBtn');
-    setBtn(btn, true, '<i class="fas fa-circle-notch fa-spin"></i> &nbsp;Sending…');
+    const btn  = document.getElementById('quoteSubmitBtn');
+    const idle = btn.innerHTML;
+    setBtn(btn, true, SPIN + 'Sending…');
 
     try {
       const res  = await fetch(`${API}/announcements/quote`, post(Object.fromEntries(new FormData(e.target))));
@@ -472,29 +444,28 @@ function initQuoteForm() {
       if (res.ok) {
         form.classList.add('hidden');
         document.getElementById('quoteSuccess').classList.remove('hidden');
-        showToast('Quote request sent! Check your email. 📧', 'success');
+        showToast('Quote request sent! Check your email.', 'success');
       } else {
         errEl.textContent = data.message || 'Something went wrong. Please try again.';
         errEl.classList.remove('hidden');
-        setBtn(btn, false, '<i class="fas fa-paper-plane"></i> &nbsp;Send Quote Request');
+        setBtn(btn, false, idle);
       }
     } catch {
       errEl.textContent = 'Network error. Check your connection and try again.';
       errEl.classList.remove('hidden');
-      setBtn(btn, false, '<i class="fas fa-paper-plane"></i> &nbsp;Send Quote Request');
+      setBtn(btn, false, idle);
     }
   });
 }
 
-/* ════════════════════════════════════════════════════════
-   HELPERS
-   ════════════════════════════════════════════════════════ */
+/* ══════════════════ HELPERS ══════════════════ */
+
 function post(body) {
-  return { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) };
+  return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
 }
 function setBtn(b, d, h) { if (!b) return; b.disabled = d; b.innerHTML = h; }
 function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 function showToast(msg, type = 'success') {
   const t = document.getElementById('toast');
@@ -502,9 +473,10 @@ function showToast(msg, type = 'success') {
   t.textContent = msg; t.className = `toast ${type} show`;
   clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove('show'), 4500);
 }
-function togglePassword(id) {
+function togglePassword(id, btn) {
   const inp = document.getElementById(id); if (!inp) return;
-  inp.type  = inp.type === 'password' ? 'text' : 'password';
-  const ic  = inp.closest('.pw-wrap')?.querySelector('.pw-toggle i');
-  if (ic) ic.className = inp.type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  const use = btn?.querySelector('use');
+  if (use) use.setAttribute('href', inp.type === 'password' ? '#i-eye' : '#i-eye-off');
+  btn?.setAttribute('aria-label', inp.type === 'password' ? 'Show password' : 'Hide password');
 }
